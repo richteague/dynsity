@@ -3,6 +3,7 @@ import emcee
 import numpy as np
 import scipy.constants as sc
 from scipy.interpolate import CubicSpline
+from numpy.polynomial.polynomial import Polynomial
 
 class profile(object):
 
@@ -10,6 +11,7 @@ class profile(object):
 
     mu = 2.37
     msun = 1.98847e30
+    n0 = 1e6
     priors = {}
 
     def __init__(self, rvals, v_phi, zvals=None, T_gas=None, dvphi=None,
@@ -54,20 +56,38 @@ class profile(object):
         self._fit_gamma = False
         self._fit_mstar = False
         self._fit_perts = False
+        self._fit_npoly = False
         self._smoothprs = False
 
     # -- Main Fitting Function -- #
 
-    def fit_vphi(self, p0, fit_gamma=False, fit_mdisk=False, smooth=False,
+    def fit_vphi(self, p0, fix_mstar=False, fix_n0=False, fix_gamma=False,
+                 fix_mdisk=False, smooth=False, nwalkers=64, nburnin=1000,
+                 nsteps=1000, niter=None, emcee_kwargs=None,
+                 perturbations='gaussian'):
+        """
+        Coming soon.
+        """
+
+        # Verify the MCMC variables.
+        p0 = np.atleast_1d(p0)
+        nwalkers = int(max(2*p0.size, nwalkers))
+
+        # Unpack the p0 values.
+        p0_names, labels = 45., 45.
+
+
+    def fit_vphi_old(self, p0, fit_gamma=False, fit_mdisk=False, smooth=False,
                  nwalkers=64, nburnin=1000, nsteps=1000, niter=None,
-                 minimize_kwargs=None, emcee_kwargs=None):
+                 minimize_kwargs=None, emcee_kwargs=None,
+                 perturbations='gaussian'):
         """
         Find the best-fit density profile to explain the rotation profile.
         Currently there are two components: a normalized volume density, n(r),
         where the height is the height traced by the emission. This is a simple
         powerlaw,
 
-            n(r) = (r / 100au)^(gamma)
+            n(r) = n0 * (r / 100au)^(gamma)
 
         with the inclusion of Gaussian perturbations, each parameterised by a
         center, width and depth, (r_i, dr_i, log(dn_i)).
@@ -97,6 +117,8 @@ class profile(object):
             minimize_kwargs (Optional[dict]): Kwargs to pass to the
                 optimization routine.
             emcee_kwargs (Optional[dict]): Kwargs to pass to the emcee sampler.
+            perturbations (Optional[str]): Type of perturbations to assume for
+                ``n_mol``, either ``'gaussian'`` or ``'polynomial'``.
 
         Returns:
             samples: Samples of the posterior distributions.
@@ -108,11 +130,20 @@ class profile(object):
 
         # Set the global variables for the fitting.
         self._smoothprs = bool(smooth)
+        self._fit_nmol0 = int(fit_nmol0)
         self._fit_gamma = int(fit_gamma)
         self._fit_mdisk = int(fit_mdisk)
-        self._fit_perts = (len(p0) - int(fit_gamma) - int(fit_mdisk))
-        self._fit_perts = int(np.floor(self._fit_perts / 3))
-        ndim = 1 + self._fit_gamma + self._fit_mdisk + 3 * self._fit_perts
+        perturbations = perturbations.lower()
+
+        if perturbations == 'gaussian':
+            self._fit_perts = (len(p0) - int(fit_gamma) - int(fit_mdisk))
+            self._fit_perts = int(np.floor(self._fit_perts / 3))
+            ndim = 1 + self._fit_gamma + self._fit_mdisk + 3 * self._fit_perts
+        elif perturbations == 'polynomial':
+            self._fit_npoly = len(p0) - int(fit_gamma) - int(x=fit_mdisk) - 1
+        else:
+            raise ValueError("`perturbations must be 'gaussian' or `"
+                             + "'polynomial'.")
         assert p0.size == ndim, "Incorrect number of starting positions."
 
         # Print out the assumed variables to fit.
@@ -317,8 +348,13 @@ class profile(object):
 
     def _calc_n_mol(self, gamma, perts):
         """Build the gas volume density profile."""
-        n_mol =  1e6 * np.power(self.rvals / 100., gamma)
-        dn_mol = self.perturbation_multi(perts)
+        n_mol =  profile.n0 * np.power(self.rvals / 100., gamma)
+        if self._fit_perts:
+            dn_mol = self.gaussian_perturbation_multi(perts)
+        elif self._fit_npoly:
+            dn_mol = self.polynomial_perturbation(perts)
+        else:
+            return n_mol
         return n_mol * dn_mol
 
     @staticmethod
@@ -326,19 +362,23 @@ class profile(object):
         """Gaussian function."""
         return A * np.exp(-0.5 * np.power((x-x0)/dx, 2))
 
-    def perturbation(self, x0, dx, A):
-        """Perturbation function."""
+    def gaussian_perturbation(self, x0, dx, A):
+        """Gaussian perturbation function."""
         return 1.0 - profile.gaussian(self.rvals, x0, dx, A)
 
-    def perturbation_multi(self, perts):
-        """Multiple perturbations."""
+    def gaussian_perturbation_multi(self, perts):
+        """Multiple Gaussian perturbations."""
         dp = np.ones(self.rvals.size)
         if perts is not None:
             for i in range(self._fit_perts):
-                dp *= self.perturbation(perts[3*i],
-                                        perts[3*i+1],
-                                        10**perts[3*i+2])
+                dp *= self.gaussian_perturbation(perts[3*i],
+                                                 perts[3*i+1],
+                                                 10**perts[3*i+2])
         return dp
+
+    def polynomial_perturbation(self, coeffs):
+        """Polynomial pertubration vector."""
+        return Polynomial(coeffs)(self.rvals)
 
     # -- Miscellaneous Functions -- #
 
