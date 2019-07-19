@@ -7,5 +7,5 @@ Work very much in progress.
    :maxdepth: 2
    :caption: Contents:
 
-   pages/methodology
    pages/api
+   pages/methodology

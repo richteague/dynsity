@@ -5,5 +5,4 @@
 API
 ===
 
-.. autoclass:: dynsity.dynsity.fitting.profile
-    :inherited-members:
+Coming soon.

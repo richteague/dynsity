@@ -64,6 +64,7 @@ class profile(object):
         # Initialize default fitting params.
         self._set_default_variables()
         self._set_default_priors()
+        self._set_grids()
 
     # -- Main Fitting Function -- #
 
@@ -315,7 +316,7 @@ class profile(object):
 
         # Self-gravity correction.
         if self._incl_grv:
-            v_grv2 = self._calc_v_grv2(sigma)
+            v_grv2 = self._calc_v_grv2(gamma, mdisk)
         else:
             v_grv2 = 0.0
 
@@ -333,9 +334,19 @@ class profile(object):
         v_kep2 *= (self.rvals_m**2 + self.zvals_m**2)**(-3./2.)
         return v_kep2
 
-    def _calc_v_grv2(self, sigma):
-        """Calcaulte the disk self-gravity correction term."""
-        return 2. * np.pi * sc.G * sigma * self.rvals_m
+    def _calc_v_grv2(self, gamma, mdisk):
+        """Calculate the disk self-gravity correction term."""
+        mass = self._calc_sig0(gamma, mdisk)
+        mass *= np.power(self.rgrid / 100., gamma)
+        mass = np.where(self.mask, mass * self.area, 0.0)
+        phi = np.zeros(self.axis.size)
+        for i in range(self.axis.size):
+            phi_cell = mass.copy()
+            phi_cell[i, self.idx0] = 0.0
+            phi[i] = np.nansum(-sc.G * phi_cell / self.dist[i])
+        phi = phi[-len(self.rvals):]
+        #phi = np.interp(self.rvals, self.axis, phi[self.idxs])
+        return np.gradient(phi, self.rvals_m)
 
     @staticmethod
     def _dphidR(sigma):
@@ -361,9 +372,13 @@ class profile(object):
 
     def _calc_sig0(self, gamma, mdisk):
         """Return the normalization constant in [kg/m^2]."""
-        rmin, rmax = self.rvals_m[0], self.rvals_m[-1]
-        sig0 = mdisk * self.msun * (2+gamma) * (100. * sc.au)**gamma
-        sig0 /= 2.0 * np.pi * (rmax**(2+gamma) - rmin**(2+gamma))
+        if gamma <= -2.0:
+            rmin, rmax = self.rvals_m[0], self.rvals_m[-1]
+            sig0 = mdisk * self.msun * (2+gamma) * (100. * sc.au)**gamma
+            sig0 /= 2.0 * np.pi * (rmax**(2+gamma) - rmin**(2+gamma))
+        else:
+            sig0 = mdisk * self.msun * (100. * sc.au)**gamma / 2.0 / np.pi
+            sig0 /= np.trapz(self.rvals_m**(gamma + 1), x=self.rvals_m)
         return sig0
 
     def _calc_sigma(self, gamma, mdisk):
@@ -453,6 +468,27 @@ class profile(object):
         return Polynomial(coeffs)(self.rvals)
 
     # -- Miscellaneous Functions -- #
+
+    def _set_grids(self):
+        """Create the grids for the calculation of self-gravity."""
+        self.axis = np.linspace(-self.rvals[-1], self.rvals[-1],
+                                 self.rvals.size * 2 + 1)
+        xgrid, ygrid = np.meshgrid(self.axis, self.axis)
+        self.rgrid = np.hypot(xgrid, ygrid)
+        self.area = np.power(np.diff(self.axis).mean() * sc.au, 2.0)
+        self.mask = np.logical_and(self.rgrid >= self.rvals[0],
+                                    self.rgrid <= self.rvals[-1])
+        self.idx0 = abs(self.axis).argmin()
+
+        # Calcaulte the distances to each of the pixels for each pixel along
+        # the x-axis to speed up the gravitational potential calculation.
+        self.dist = np.array([np.hypot(xgrid[0, self.idx0] - xgrid,
+                                       ygrid[j, 0] - ygrid) * sc.au
+                              for j in range(self.axis.size)])
+
+        # Sort the axis for quicker interpolation.
+        self.idxs = np.argsort(abs(self.axis))
+        self.axis = abs(self.axis)[self.idxs]
 
     def _mask_NaN(self):
         """Mask all the NaN values from all arrays."""

@@ -80,12 +80,14 @@ where :math:`h_p` is the gas scale height. Unless there is some other observatio
 Disk Self-Gravity
 ^^^^^^^^^^^^^^^^^
 
-Currently to calculate the self-gravity of the disk we take the simplification of
+To calculate the self-gravity of the disk we can take the simplification of
 
 .. math::
     \left. \frac{\partial \phi_{\rm gas}}{\partial r} \right|_{r = r^{\prime}} = 2 \pi G \Sigma(r^{\prime}),
 
-which is appropriate when :math:`\Sigma_{\rm gas} = \Sigma_0 \cdot (r \, / \, r_0)^{-1}`. If :math:`\gamma \sim -1` this holds, however we need to think about this for other :math:`\gamma` values.
+which is appropriate when :math:`\Sigma_{\rm gas} = \Sigma_0 \cdot (r \, / \, r_0)^{-1}`. However, testing showed that this was a poor approximation for anything where :math:`\gamma \neq -1`, even for small changes.
+
+Current approach is to solve numerically for this, but this is relatively slow (180 times slower...). Need to think of a more appropriate approach. Maybe a pre-calculated table?
 
 
 Perturbations in :math:`n({\rm H_2})` Profile
