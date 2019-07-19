@@ -8,3 +8,4 @@ Work very much in progress.
    :caption: Contents:
 
    pages/methodology
+   pages/api
