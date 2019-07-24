@@ -85,9 +85,14 @@ To calculate the self-gravity of the disk we can take the simplification of
 .. math::
     \left. \frac{\partial \phi_{\rm gas}}{\partial r} \right|_{r = r^{\prime}} = 2 \pi G \Sigma(r^{\prime}),
 
-which is appropriate when :math:`\Sigma_{\rm gas} = \Sigma_0 \cdot (r \, / \, r_0)^{-1}`. However, testing showed that this was a poor approximation for anything where :math:`\gamma \neq -1`, even for small changes.
+which is appropriate when :math:`\Sigma_{\rm gas} = \Sigma_0 \cdot (r \, / \, r_0)^{-1}`. However, testing showed that this was a poor approximation for anything where :math:`\gamma \neq -1`, even for small changes. Current approach is to solve numerically for this, but this is relatively slow (180 times slower...).
 
-Current approach is to solve numerically for this, but this is relatively slow (180 times slower...). Need to think of a more appropriate approach. Maybe a pre-calculated table?
+We can also consider the expansion:
+
+.. math::
+    \phi_{\rm gas}(r) = -2 \pi G \int_{0}^{\infty} \int_{0}^{\infty} \Sigma(r^{\prime}) \, J_0(kr^{\prime}) \, r^{\prime} J_0(kr) \,{\rm d}r^{\prime} \,{\rm d}k
+
+where :math:`J_0` is the zeroth-order spherical Bessel function. This might not necessarily be quicker...
 
 
 Perturbations in :math:`n({\rm H_2})` Profile
